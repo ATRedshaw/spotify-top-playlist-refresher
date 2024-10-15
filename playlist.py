@@ -3,8 +3,6 @@ from dotenv import load_dotenv
 import os
 import spotipy
 from spotipy.oauth2 import SpotifyOAuth
-import time
-from requests.exceptions import Timeout
 
 def print_flush(*args, **kwargs):
     print(*args, **kwargs)
@@ -51,8 +49,6 @@ except Exception as e:
     print_flush(f"Error initializing Spotify client: {e}")
     sys.exit(1)
 
-from requests.exceptions import RequestException, Timeout
-
 def get_top_tracks(limit, time_range):
     """
     Fetch top tracks from Spotify for a user.
@@ -60,57 +56,17 @@ def get_top_tracks(limit, time_range):
     print_flush(f"Fetching top {limit} tracks for time range: {time_range}")
     tracks = []
     offset = 0
-    max_retries = 3
-    retry_delay = 5  # seconds
-
-    # Verify authentication token
-    try:
-        sp.current_user()
-        print_flush("Authentication token verified successfully.")
-    except Exception as e:
-        print_flush(f"Error verifying authentication token: {e}")
-        return []
-
     while len(tracks) < limit:
-        for attempt in range(max_retries):
-            try:
-                print_flush(f"Attempting to fetch tracks (attempt {attempt + 1}/{max_retries}, offset: {offset})...")
-                results = sp.current_user_top_tracks(limit=50, offset=offset, time_range=time_range, timeout=30)
-                new_tracks = results['items']
-                tracks.extend(new_tracks)
-                print_flush(f"Fetched {len(new_tracks)} tracks (total: {len(tracks)})")
-                
-                if len(new_tracks) < 50:
-                    print_flush("Reached end of available tracks.")
-                    break
-                
-                offset += 50
-                break  # Success, exit retry loop
-            except Timeout:
-                print_flush("Request timed out.")
-                if attempt == max_retries - 1:
-                    print_flush("Max retries reached. Moving on...")
-                    break
-                print_flush(f"Retrying in {retry_delay} seconds...")
-                time.sleep(retry_delay)
-            except RequestException as e:
-                print_flush(f"Network error occurred: {e}")
-                if attempt == max_retries - 1:
-                    print_flush("Max retries reached. Moving on...")
-                    break
-                print_flush(f"Retrying in {retry_delay} seconds...")
-                time.sleep(retry_delay)
-            except Exception as e:
-                print_flush(f"Error fetching top tracks: {e}")
-                if attempt == max_retries - 1:
-                    print_flush("Max retries reached. Moving on...")
-                    break
-                print_flush(f"Retrying in {retry_delay} seconds...")
-                time.sleep(retry_delay)
-        
-        if len(new_tracks) < 50:
+        try:
+            results = sp.current_user_top_tracks(limit=50, offset=offset, time_range=time_range)
+            tracks.extend(results['items'])
+            print_flush(f"Fetched {len(results['items'])} tracks (offset: {offset})")
+            if len(results['items']) < 50:
+                break
+            offset += 50
+        except Exception as e:
+            print_flush(f"Error fetching top tracks: {e}")
             break
-
     print_flush(f"Total tracks fetched: {len(tracks)}")
     return tracks[:limit]
 
@@ -216,11 +172,7 @@ def main():
 
     time_ranges = ['short_term', 'medium_term', 'long_term']
     for time_range in time_ranges:
-        try:
-            update_playlist(time_range, track_limit, is_playlist_private)
-        except Exception as e:
-            print_flush(f"Error updating playlist for {time_range}: {e}")
-            print_flush("Continuing with next time range...")
+        update_playlist(time_range, track_limit, is_playlist_private)
 
     print_flush("Playlist update process completed.")
 
