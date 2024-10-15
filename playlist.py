@@ -51,6 +51,8 @@ except Exception as e:
     print_flush(f"Error initializing Spotify client: {e}")
     sys.exit(1)
 
+from requests.exceptions import RequestException, Timeout
+
 def get_top_tracks(limit, time_range):
     """
     Fetch top tracks from Spotify for a user.
@@ -61,11 +63,19 @@ def get_top_tracks(limit, time_range):
     max_retries = 3
     retry_delay = 5  # seconds
 
+    # Verify authentication token
+    try:
+        sp.current_user()
+        print_flush("Authentication token verified successfully.")
+    except Exception as e:
+        print_flush(f"Error verifying authentication token: {e}")
+        return []
+
     while len(tracks) < limit:
         for attempt in range(max_retries):
             try:
                 print_flush(f"Attempting to fetch tracks (attempt {attempt + 1}/{max_retries}, offset: {offset})...")
-                results = sp.current_user_top_tracks(limit=50, offset=offset, time_range=time_range)
+                results = sp.current_user_top_tracks(limit=50, offset=offset, time_range=time_range, timeout=30)
                 new_tracks = results['items']
                 tracks.extend(new_tracks)
                 print_flush(f"Fetched {len(new_tracks)} tracks (total: {len(tracks)})")
@@ -76,6 +86,13 @@ def get_top_tracks(limit, time_range):
                 
                 offset += 50
                 break  # Success, exit retry loop
+            except Timeout:
+                print_flush("Request timed out.")
+                if attempt == max_retries - 1:
+                    print_flush("Max retries reached. Moving on...")
+                    break
+                print_flush(f"Retrying in {retry_delay} seconds...")
+                time.sleep(retry_delay)
             except RequestException as e:
                 print_flush(f"Network error occurred: {e}")
                 if attempt == max_retries - 1:
