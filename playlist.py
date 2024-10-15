@@ -65,7 +65,7 @@ def get_top_tracks(limit, time_range):
         for attempt in range(max_retries):
             try:
                 print_flush(f"Attempting to fetch tracks (attempt {attempt + 1}/{max_retries}, offset: {offset})...")
-                results = sp.current_user_top_tracks(limit=50, offset=offset, time_range=time_range, timeout=30)
+                results = sp.current_user_top_tracks(limit=50, offset=offset, time_range=time_range)
                 new_tracks = results['items']
                 tracks.extend(new_tracks)
                 print_flush(f"Fetched {len(new_tracks)} tracks (total: {len(tracks)})")
@@ -76,8 +76,12 @@ def get_top_tracks(limit, time_range):
                 
                 offset += 50
                 break  # Success, exit retry loop
-            except Timeout:
-                print_flush(f"Timeout occurred. Retrying in {retry_delay} seconds...")
+            except RequestException as e:
+                print_flush(f"Network error occurred: {e}")
+                if attempt == max_retries - 1:
+                    print_flush("Max retries reached. Moving on...")
+                    break
+                print_flush(f"Retrying in {retry_delay} seconds...")
                 time.sleep(retry_delay)
             except Exception as e:
                 print_flush(f"Error fetching top tracks: {e}")
