@@ -95,7 +95,7 @@ def get_or_create_playlist(name, is_private, description):
 
 def update_playlist(time_range, track_limit, is_private):
     """
-    Update a playlist with top tracks for a given time range.
+    Update a playlist with top tracks for a given time range, preserving existing tracks.
     """
     print_flush(f"Updating playlist for time range: {time_range}")
     
@@ -114,24 +114,49 @@ def update_playlist(time_range, track_limit, is_private):
 
     playlist = get_or_create_playlist(playlist_name, is_private, playlist_description)
 
-    print_flush(f"Clearing existing tracks from playlist '{playlist_name}'...")
+    # Get current tracks in the playlist
+    current_tracks = []
+    results = sp.playlist_items(playlist['id'], fields="items(track(uri))")
+    current_tracks = [item['track']['uri'] for item in results['items']]
+
+    # Create a set of current track URIs for faster lookup
+    current_track_set = set(current_tracks)
+
+    # Prepare the new track list
+    new_track_list = []
+    tracks_to_add = []
+
+    for track in top_tracks:
+        if track['uri'] in current_track_set:
+            new_track_list.append(track['uri'])
+        else:
+            tracks_to_add.append(track['uri'])
+
+    # Add any remaining current tracks that are not in the top tracks
+    new_track_list.extend([uri for uri in current_tracks if uri not in new_track_list])
+
+    # Trim the list to the desired limit
+    new_track_list = new_track_list[:track_limit]
+
+    print_flush(f"Reordering tracks in playlist '{playlist_name}'...")
     try:
-        sp.playlist_replace_items(playlist['id'], [])
+        sp.playlist_replace_items(playlist['id'], new_track_list)
     except Exception as e:
-        print_flush(f"Error clearing playlist: {e}")
+        print_flush(f"Error reordering playlist: {e}")
         sys.exit(1)
 
-    track_uris = [track['uri'] for track in top_tracks]
-    print_flush(f"Adding {len(track_uris)} tracks to playlist '{playlist_name}'...")
-    try:
-        sp.playlist_add_items(playlist['id'], track_uris)
-    except Exception as e:
-        print_flush(f"Error adding tracks to playlist: {e}")
-        sys.exit(1)
+    if tracks_to_add:
+        print_flush(f"Adding {len(tracks_to_add)} new tracks to playlist '{playlist_name}'...")
+        try:
+            sp.playlist_add_items(playlist['id'], tracks_to_add)
+        except Exception as e:
+            print_flush(f"Error adding new tracks to playlist: {e}")
+            sys.exit(1)
 
     print_flush('-' * 30)
     print_flush(f"Playlist '{playlist_name}' updated successfully!")
-    print_flush(f"Total tracks added: {len(track_uris)}")
+    print_flush(f"Total tracks: {len(new_track_list)}")
+    print_flush(f"New tracks added: {len(tracks_to_add)}")
     print_flush(f"Playlist privacy: {'Private' if is_private else 'Public'}")
     print_flush('-' * 30)
 
